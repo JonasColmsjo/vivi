@@ -1,0 +1,129 @@
+---
+# Install local analysis tools for trace parsing and forensic analysis
+#
+# Installs into the Python environment specified in config.sh (PYTHON_ENV).
+# Default: ~/micromamba-base/bin
+#
+# Usage:
+#   ansible-playbook -i localhost, -c local ansible/setup-analysis-tools.yml --ask-become-pass
+#
+# Tools installed:
+#   Python packages (in PYTHON_ENV):
+#     - procmon-parser    Parse ProcMon .PML files + procmon2csv CLI
+#     - etl-parser        Parse Windows ETW .ETL files on Linux
+#     - regipy            Parse Windows registry hives offline
+#     - python-evtx       Parse Windows .evtx event logs
+#     - construct         Binary data parsing (dependency)
+#
+#   System packages (apt):
+#     - python3-venv      Python venv support
+#     - expect            For vm-exec.exp telnet automation
+#     - tftpd-hpa         TFTP server for small file transfers from VMs
+#     - ent               Entropy calculator for packing detection
+#     - yara              Pattern matching for malware classification
+#     - radare2           Reverse engineering framework (r2)
+#     - upx-ucl           UPX packer/unpacker
+#     - 7zip              Archive extraction (AES-encrypted zips)
+#     - binutils          strings, objdump, etc.
+#     - file              File type identification
+#     - curl              HTTP client for API calls (VT, MalwareBazaar)
+
+- name: Setup local analysis tools (Debian/Kali)
+  hosts: all
+  connection: local
+
+  vars:
+    # Override with -e python_env=/path/to/bin if needed
+    python_env: "{{ lookup('env', 'HOME') }}/micromamba-base/bin"
+
+  tasks:
+    # ── System packages ─────────────────────────────────────────────
+    - name: Install system dependencies
+      become: yes
+      apt:
+        name:
+          - python3-venv
+          - expect
+          - tftpd-hpa
+          - ent
+          - yara
+          - radare2
+          - upx-ucl
+          - 7zip
+          - binutils
+          - file
+          - curl
+          - tcpdump
+          - inetsim
+        state: present
+        update_cache: yes
+        cache_valid_time: 3600
+
+    # ── Verify Python env exists ────────────────────────────────────
+    - name: Check Python environment exists
+      stat:
+        path: "{{ python_env }}/python3"
+      register: python_check
+
+    - name: Fail if Python env not found
+      fail:
+        msg: |
+          Python not found at {{ python_env }}/python3
+          Set PYTHON_ENV in config.sh or pass -e python_env=/path/to/bin
+          For micromamba: micromamba create -n base python=3.12
+      when: not python_check.stat.exists
+
+    - name: Check pip exists
+      stat:
+        path: "{{ python_env }}/pip"
+      register: pip_check
+
+    - name: Fail if pip not found
+      fail:
+        msg: |
+          pip not found at {{ python_env }}/pip
+          Install pip in your Python environment first.
+      when: not pip_check.stat.exists
+
+    # ── Python analysis packages ────────────────────────────────────
+    - name: Install Python packages from requirements.txt
+      command: "{{ python_env }}/pip install -r {{ playbook_dir }}/../requirements.txt"
+      register: pip_result
+      changed_when: "'Successfully installed' in pip_result.stdout"
+
+    # ── Verification ────────────────────────────────────────────────
+    - name: Verify installed tools
+      shell: |
+        echo "=== Python environment ==="
+        echo "  {{ python_env }}/python3"
+        {{ python_env }}/python3 --version
+        echo ""
+        echo "=== Installed packages ==="
+        {{ python_env }}/pip list 2>/dev/null | grep -iE 'procmon|etl-parser|regipy|evtx|construct|minidump|pefile|pyghidra|networkx'
+        echo ""
+        echo "=== CLI tools ==="
+        for cmd in procmon2csv registry-dump; do
+          if [ -x "{{ python_env }}/$cmd" ]; then
+            echo "  $cmd: {{ python_env }}/$cmd"
+          else
+            echo "  $cmd: not found"
+          fi
+        done
+        echo ""
+        echo "=== Quick import test ==="
+        {{ python_env }}/python3 -c "
+        import procmon_parser; print('  procmon_parser OK')
+        import etl; print('  etl (etl-parser) OK')
+        import regipy; print('  regipy OK')
+        import Evtx; print('  python-evtx OK')
+        import minidump; print('  minidump OK')
+        import pefile; print('  pefile OK')
+        import pyghidra; print('  pyghidra OK')
+        import networkx; print('  networkx OK')
+        "
+      register: verify_output
+      changed_when: false
+
+    - name: Show verification summary
+      debug:
+        var: verify_output.stdout_lines

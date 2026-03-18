@@ -1,0 +1,320 @@
+---
+# Setup KVM/libvirt + forensic tools on tcentre1 / tcentre2
+#
+# Installs libguestfs for offline disk inspection (works alongside VMware)
+# and KVM/libvirt for optionally running VMs under KVM.
+#
+# Usage:
+#   ansible-playbook ansible/setup-kvm-forensics.yml -i ~/repos/gizur-host-setup/ansible/inventory.ini -l tcentre1
+#   ansible-playbook ansible/setup-kvm-forensics.yml -i ~/repos/gizur-host-setup/ansible/inventory.ini -l tcentre2
+#
+# After running: log out and back in for group membership to take effect.
+
+- name: Setup KVM/libvirt and forensic tools
+  hosts: all
+  become: yes
+
+  vars:
+    kvm_user: me
+    kvm_dirs:
+      - /mnt/vm/kvm/templates
+      - /mnt/vm/kvm/instances
+      - /mnt/vm/kvm/overlays
+      - /mnt/vm/kvm/mnt
+
+  tasks:
+    # ── APT packages ──────────────────────────────────────────────────
+    - name: Install KVM/libvirt and libguestfs packages
+      apt:
+        name:
+          - libvirt-daemon-system
+          - libvirt-clients
+          - virtinst
+          - virt-manager
+          - libguestfs-tools
+          - qemu-system-x86
+          - qemu-system-arm
+          - qemu-user-static
+          - qemu-utils
+          - ovmf
+          - genisoimage
+          - socat
+          - htop
+          - ent
+          - yara
+          - upx-ucl
+          - 7zip
+          - binutils
+          - file
+          - curl
+          - tcpdump
+          - inetsim
+        state: present
+        update_cache: yes
+        cache_valid_time: 3600
+
+    # ── User groups ───────────────────────────────────────────────────
+    - name: Add user to kvm and libvirt groups
+      user:
+        name: "{{ kvm_user }}"
+        groups:
+          - kvm
+          - libvirt
+        append: yes
+
+    # ── Enable libvirtd ──────────────────────────────────────────────
+    - name: Enable and start libvirtd
+      systemd:
+        name: libvirtd
+        enabled: yes
+        state: started
+
+    # ── Enable default network (creates virbr0) ─────────────────────
+    - name: Start and autostart default libvirt network
+      shell: |
+        virsh net-start default 2>/dev/null || true
+        virsh net-autostart default
+      changed_when: false
+
+    # ── Host-only bridge (virbr1, no NAT, no internet) ──────────────
+    - name: Install dnsmasq
+      apt:
+        name: dnsmasq
+        state: present
+
+    - name: Create host-only bridge network interface
+      copy:
+        dest: /etc/network/interfaces.d/virbr1
+        content: |
+          auto virbr1
+          iface virbr1 inet static
+            address 192.168.100.1
+            netmask 255.255.255.0
+            bridge_ports none
+            bridge_stp on
+            bridge_fd 0
+        mode: "0644"
+      register: virbr1_config
+
+    - name: Bring up virbr1
+      shell: |
+        ip link show virbr1 2>/dev/null || {
+          ip link add virbr1 type bridge
+          ip addr add 192.168.100.1/24 dev virbr1
+        }
+        ip link set virbr1 up
+      changed_when: false
+
+    - name: Configure dnsmasq for host-only DHCP on virbr1
+      copy:
+        dest: /etc/dnsmasq.d/virbr1-hostonly.conf
+        content: |
+          interface=virbr1
+          bind-interfaces
+          dhcp-range=192.168.100.2,192.168.100.254,255.255.255.0,12h
+          no-resolv
+          no-hosts
+        mode: "0644"
+      register: dnsmasq_config
+
+    - name: Restart dnsmasq if config changed
+      systemd:
+        name: dnsmasq
+        enabled: yes
+        state: restarted
+      when: dnsmasq_config.changed or virbr1_config.changed
+
+    - name: Ensure dnsmasq is running
+      systemd:
+        name: dnsmasq
+        enabled: yes
+        state: started
+
+    # ── Create directories ───────────────────────────────────────────
+    - name: Create KVM directories
+      file:
+        path: "{{ item }}"
+        state: directory
+        owner: "{{ kvm_user }}"
+        group: "{{ kvm_user }}"
+        mode: "0755"
+      loop: "{{ kvm_dirs }}"
+
+    # ── Hypervisor switch script ─────────────────────────────────────
+    - name: Deploy hypervisor-switch script
+      copy:
+        dest: /usr/local/bin/hypervisor-switch
+        mode: "0755"
+        content: |
+          #!/usr/bin/env bash
+          # Switch between VMware and KVM hypervisors
+          # Usage: hypervisor-switch kvm|vmware|status
+          set -euo pipefail
+
+          cmd="${1:-status}"
+
+          vmware_modules="vmmon vmnet vmw_vmci"
+          kvm_modules="kvm_intel kvm"
+
+          is_loaded() { lsmod | grep -qw "$1" 2>/dev/null; }
+
+          case "$cmd" in
+            status)
+              echo "=== Hypervisor Module Status ==="
+              for m in $kvm_modules; do
+                if is_loaded "$m"; then
+                  echo "  $m: loaded"
+                else
+                  echo "  $m: not loaded"
+                fi
+              done
+              for m in $vmware_modules; do
+                if is_loaded "$m"; then
+                  echo "  $m: loaded"
+                else
+                  echo "  $m: not loaded"
+                fi
+              done
+
+              if is_loaded kvm_intel && is_loaded vmmon; then
+                echo ""
+                echo "Both KVM and VMware modules loaded (forensic inspection OK, but only one can run VMs)"
+              elif is_loaded kvm_intel; then
+                echo ""
+                echo "Active hypervisor: KVM"
+              elif is_loaded vmmon; then
+                echo ""
+                echo "Active hypervisor: VMware"
+              else
+                echo ""
+                echo "No hypervisor modules loaded"
+              fi
+              ;;
+
+            kvm)
+              echo "Switching to KVM..."
+              # Stop VMware VMs
+              if command -v vmrun &>/dev/null; then
+                running=$(vmrun list 2>/dev/null | tail -n +2)
+                if [ -n "$running" ]; then
+                  echo "Stopping VMware VMs..."
+                  while IFS= read -r vmx; do
+                    [ -n "$vmx" ] && vmrun stop "$vmx" soft 2>/dev/null || true
+                  done <<< "$running"
+                  sleep 2
+                fi
+              fi
+              # Stop VMware services
+              for svc in vmware vmware-workstation-server; do
+                systemctl stop "$svc" 2>/dev/null || true
+              done
+              # Unload VMware modules
+              for m in vmnet vmmon vmw_vmci; do
+                rmmod "$m" 2>/dev/null || true
+              done
+              # Load KVM modules
+              modprobe kvm
+              modprobe kvm_intel
+              echo "Switched to KVM."
+              ;;
+
+            vmware)
+              echo "Switching to VMware..."
+              # Stop KVM VMs
+              if command -v virsh &>/dev/null; then
+                for dom in $(virsh list --name 2>/dev/null); do
+                  [ -n "$dom" ] && virsh shutdown "$dom" 2>/dev/null || true
+                done
+                sleep 3
+                for dom in $(virsh list --name 2>/dev/null); do
+                  [ -n "$dom" ] && virsh destroy "$dom" 2>/dev/null || true
+                done
+              fi
+              # Unload KVM modules
+              rmmod kvm_intel 2>/dev/null || true
+              rmmod kvm 2>/dev/null || true
+              # Load VMware modules
+              for svc in vmware vmware-workstation-server; do
+                systemctl start "$svc" 2>/dev/null || true
+              done
+              echo "Switched to VMware."
+              ;;
+
+            *)
+              echo "Usage: hypervisor-switch kvm|vmware|status"
+              exit 1
+              ;;
+          esac
+
+    # ── QEMU bridge helper (needed for non-root bridged networking) ───
+    - name: Create /etc/qemu directory
+      file:
+        path: /etc/qemu
+        state: directory
+        mode: "0755"
+
+    - name: Allow virbr0 and virbr1 in bridge.conf
+      copy:
+        dest: /etc/qemu/bridge.conf
+        content: |
+          allow virbr0
+          allow virbr1
+        mode: "0644"
+
+    - name: Set setuid on qemu-bridge-helper
+      file:
+        path: /usr/lib/qemu/qemu-bridge-helper
+        mode: "04755"
+
+    # ── Python forensic tools (venv) ──────────────────────────────────
+    - name: Install python3-venv
+      apt:
+        name: python3-venv
+        state: present
+
+    - name: Create forensics venv
+      become: no
+      command: python3 -m venv /home/{{ kvm_user }}/forensics-venv
+      args:
+        creates: /home/{{ kvm_user }}/forensics-venv/bin/pip
+
+    - name: Install regipy and python-evtx in forensics venv
+      become: no
+      shell: |
+        /home/{{ kvm_user }}/forensics-venv/bin/pip install regipy python-evtx
+      args:
+        executable: /bin/bash
+
+    # ── Verification ─────────────────────────────────────────────────
+    - name: Verify installations
+      shell: |
+        echo "=== Installed packages ==="
+        dpkg -l | grep -E 'libguestfs-tools|libvirt-daemon|qemu-utils|virt-manager|dnsmasq' | awk '{print "  "$2, $3}'
+        echo ""
+        echo "=== Kernel modules ==="
+        for m in kvm kvm_intel vmmon vmnet; do
+          if lsmod | grep -qw "$m"; then
+            echo "  $m: loaded"
+          else
+            echo "  $m: not loaded"
+          fi
+        done
+        echo ""
+        echo "=== libvirtd status ==="
+        systemctl is-active libvirtd || true
+        echo ""
+        echo "=== Host-only network (virbr1) ==="
+        ip addr show virbr1 2>/dev/null | grep 'inet ' || echo "  virbr1 not configured"
+        systemctl is-active dnsmasq && echo "  dnsmasq: running" || echo "  dnsmasq: not running"
+        echo ""
+        echo "=== KVM directories ==="
+        ls -la /mnt/vm/kvm/
+        echo ""
+        echo "=== hypervisor-switch ==="
+        which hypervisor-switch && echo "  installed"
+      register: verify_output
+      changed_when: false
+
+    - name: Show verification summary
+      debug:
+        var: verify_output.stdout_lines

@@ -1,0 +1,15 @@
+# Python dependencies for gizur-vivi
+# Install: pip install -r requirements.txt
+# Used by: ansible/setup-local.yml, ansible/setup-analysis-tools.yml
+
+# Reverse engineering
+minidump          # PE extraction from ProcDump memory dumps
+pefile            # PE file parsing (headers, resources, imports)
+pyghidra          # Ghidra headless API for Python
+networkx          # Call graph topological sort
+
+# Trace & forensic analysis
+procmon-parser    # Parse ProcMon .PML files
+etl-parser        # Parse Windows ETW .ETL files on Linux
+regipy            # Parse Windows registry hives offline
+python-evtx       # Parse Windows .evtx event logs

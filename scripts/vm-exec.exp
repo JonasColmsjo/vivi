@@ -1,0 +1,80 @@
+#!/usr/bin/expect -f
+#
+# Execute a command inside a Windows VM via telnet.
+# Usage: vm-exec.exp <host> <vmip> <user> <pass> <command> [timeout_sec]
+#
+# The host is the SSH jump host. We SSH to it and telnet from there.
+# Output: command stdout (between prompt lines), exits 0 on success.
+
+if {$argc < 5} {
+    puts stderr "Usage: vm-exec.exp <ssh_host> <vm_ip> <user> <pass> <command> \[timeout\]"
+    exit 1
+}
+
+set ssh_host [lindex $argv 0]
+set vm_ip    [lindex $argv 1]
+set user     [lindex $argv 2]
+set pass     [lindex $argv 3]
+set cmd      [lindex $argv 4]
+set tmout    [expr {$argc > 5 ? [lindex $argv 5] : 30}]
+
+set timeout $tmout
+
+# SSH to the host, then telnet to the VM (-t forces PTY allocation)
+spawn ssh -t -o StrictHostKeyChecking=no $ssh_host "telnet $vm_ip"
+
+# Wait for login prompt
+expect {
+    "login:" {}
+    "Login:" {}
+    timeout {
+        puts stderr "ERROR: Timed out waiting for login prompt"
+        exit 1
+    }
+    eof {
+        puts stderr "ERROR: Connection closed before login prompt"
+        exit 1
+    }
+}
+
+send "$user\r"
+
+# Wait for password prompt
+expect {
+    -re {[Pp]assword:} {}
+    timeout {
+        puts stderr "ERROR: Timed out waiting for password prompt"
+        exit 1
+    }
+}
+
+# XP telnet server needs a pause before accepting password input
+sleep 2
+send "$pass\r"
+
+# Wait for command prompt (C:\> or similar)
+expect {
+    -re {[A-Z]:\\[^>]*>} {}
+    timeout {
+        puts stderr "ERROR: Timed out waiting for command prompt after login"
+        exit 1
+    }
+}
+
+# Send the command
+send "$cmd\r"
+
+# Wait for next prompt (captures command output)
+expect {
+    -re {[A-Z]:\\[^>]*>} {}
+    timeout {
+        puts stderr "ERROR: Timed out waiting for command to complete"
+        exit 1
+    }
+}
+
+# Send exit
+send "exit\r"
+
+expect eof
+exit 0

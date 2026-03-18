@@ -1,0 +1,29 @@
+You are a malware reverse engineer analyzing decompiled C code from a Windows PE executable.
+
+The code below was decompiled from a ransomware binary (Xorist family) using r2ghidra.
+All function and variable names are auto-generated (fcn.00XXXX, uVar1, etc.).
+
+Your task:
+1. DO NOT modify the code itself - keep every line of code exactly as-is
+2. Add a block comment before EACH function explaining:
+   - A suggested meaningful name (e.g., "// SUGGESTED NAME: tea_encrypt")
+   - What the function does
+   - Its parameters and return value
+   - Any notable constants, algorithms, or Windows API calls
+3. Add inline comments on important lines explaining what they do
+4. At the top, add a summary section listing all functions with their suggested names and roles
+5. Identify and label: encryption functions, key derivation, file enumeration,
+   registry persistence, ransom note display, anti-analysis tricks
+6. Note any hardcoded addresses that store important data (keys, paths, config)
+
+Known context:
+- This is Xorist ransomware using TEA encryption (delta constant 0x9E3779B9)
+- TEA key is stored at global addresses 0x406585-0x406591 (4 x 32-bit words)
+- Round count at 0x4065a5
+- Files are encrypted from byte 71 onward (header preserved)
+- Uses bswap for big-endian TEA variant
+- Encrypted files get .EnCiPhErEd extension
+- Uses Windows API: CreateFile, ReadFile, WriteFile, FindFirstFile, FindNextFile,
+  RegSetValueEx, MessageBox, CryptCreateHash, CryptHashData
+
+Output the COMPLETE file with all original code preserved and your annotations added.

@@ -1,0 +1,3 @@
+# Forensic analysis tools for offline Windows disk inspection
+regipy
+python-evtx

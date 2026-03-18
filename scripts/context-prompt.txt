@@ -1,0 +1,15 @@
+You are a malware reverse engineer. Below is the output of static analysis tools (packing detection, crypto constant scanning, and string extraction) run against a PE executable.
+
+Summarize the findings into a concise context file (10-20 lines) that would help someone annotating the decompiled code. Include:
+- What type of malware this likely is (ransomware, trojan, etc.)
+- Encryption algorithms detected and their constants/addresses
+- Notable Windows API imports (crypto, file, registry, network)
+- File extensions, registry keys, paths found in strings
+- Any persistence mechanisms suggested by the strings
+- File format details (packed, compiler, architecture)
+
+CRITICAL OUTPUT RULES:
+- Output ONLY plain text, no markdown fences.
+- Be factual — only state what the analysis shows, don't speculate beyond the evidence.
+- Use short bullet points or dash-separated lines.
+- Start directly with the content. No preamble.

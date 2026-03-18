@@ -1,0 +1,106 @@
+#!/usr/bin/env bash
+# config.sh — Host configuration, shared paths, credentials, and OS presets
+# Copy this to config.sh and edit for your environment.
+# config.sh is gitignored — never commit it.
+
+# Host-specific settings (keyed by SSH alias)
+# Add your SSH hosts here. Each host needs a root alias for privileged ops.
+declare -A HOST_IP HOST_ROOT VMBASE EXT_DEV
+HOST_IP[myhost]="192.168.1.100"
+HOST_ROOT[myhost]="myhost-root"          # SSH alias with root access
+VMBASE[myhost]="/mnt/ext/virtualmachines" # VMware template directory
+EXT_DEV[myhost]="/dev/sda1"              # External disk device
+
+# Shared paths (same on all hosts)
+SBXDIR="/mnt/vm/sandboxes"               # VMware sandbox directory
+KVMDIR="/mnt/vm/kvm"                     # KVM base directory
+KVMTPL="${KVMDIR}/templates"             # KVM template images
+ISODIR="/mnt/ext/Installation_files"     # OS ISOs and tool caches
+
+# VM credentials (used for telnet access to Windows VMs)
+VM_USER="me"
+VM_PASS="changeme"
+
+# Networking defaults
+KVM_BRIDGE="virbr0"                      # NAT bridge (internet access)
+KVM_HOSTONLY="virbr1"                    # Host-only bridge (no internet)
+VMWARE_NIC="eno1"                        # VMware bridged NIC
+
+# FTP server for large file transfers from VMs
+FTPDIR="${KVMDIR}/mnt/ftp"               # FTP upload directory on host
+FTP_BIND="192.168.100.1"                 # Host IP on host-only network
+FTP_PYTHON="/home/me/forensics-venv/bin/python3"  # Python with pyftpdlib
+
+# Tool cache (downloaded installers are cached here)
+TOOLS_CACHE="${ISODIR}/xp-tools"
+
+# API keys
+export VT_API_KEY=""                            # VirusTotal API key (free tier)
+
+# Local Python environment for analysis tools (procmon-parser, etl-parser, etc.)
+# Set to the bin/ directory of your Python env (micromamba, venv, or system)
+PYTHON_ENV="$HOME/micromamba-base/bin"       # pip, python3 here
+
+# Guest tool paths (where tools are installed inside Windows VMs)
+PROCMON_EXE='C:\local\Sysinternals\Procmon.exe'
+PSEXEC_EXE='C:\local\Sysinternals\PsExec.exe'
+PROCDUMP_EXE='C:\local\Sysinternals\procdump.exe'
+
+# Tools source directory on host (for build-tools-iso.sh)
+# Points to a directory with Windows XP tools (Sysinternals, 7-Zip, etc.)
+TOOLS_SOURCE="/mnt/ext/Installation_files/Windows-XP-Stuffz"
+
+# Malware sample definitions — map sample name to VM execution command
+# Used by: just run-sample <vm> <sample> <outdir> [wait_secs]
+# Define entries here, or create a samples.sh in consumer repos that import this justfile.
+# The run-sample target sources samples.sh from the importing justfile's directory if it exists.
+declare -A MALWARE_CMD
+# MALWARE_CMD[example]='C:\samples\example.exe'
+# MALWARE_CMD[ransomware]='"C:\Lab Samples\ransomware.exe"'
+# MALWARE_CMD[dropper]='copy "C:\staging\payload.ex_" C:\payload.exe && C:\payload.exe'
+
+# ARM QEMU settings (for standalone ARM VMs, not libvirt-managed)
+ARM_PFLASH="/usr/share/AAVMF/AAVMF_CODE.fd"       # ARM64 UEFI firmware (read-only)
+ARM_PFLASH_VARS="/usr/share/AAVMF/AAVMF_VARS.fd"  # ARM64 UEFI vars template
+ARM_MEM="512"                                       # Default RAM (MB)
+ARM_CPUS="2"                                        # Default vCPUs
+ARM_CPU_MODEL="cortex-a57"                          # CPU model
+
+# OS presets for install (keyed by OS name)
+declare -A os_iso os_mem os_cpus os_disk os_guest os_variant os_kvm_extra os_vmware_hw os_key os_arch
+
+os_iso[winxp]="windows_xp_professional_with_service_pack_3_x86_cd_vl_x14-73974.iso"
+os_mem[winxp]=1024; os_cpus[winxp]=1; os_disk[winxp]=10
+os_guest[winxp]="winXPPro"; os_variant[winxp]="winxp"
+os_kvm_extra[winxp]="--machine pc-i440fx-2.11"
+os_arch[winxp]="i386"
+os_vmware_hw[winxp]="ide"
+os_key[winxp]=""
+
+os_iso[winxpx64]="Windows_XP_Professional_64-bit_Corporate_Edition.iso"
+os_mem[winxpx64]=1024; os_cpus[winxpx64]=1; os_disk[winxpx64]=10
+os_guest[winxpx64]="winXPPro-64"; os_variant[winxpx64]="win2k3"
+os_kvm_extra[winxpx64]="--machine pc-i440fx-2.11"
+os_vmware_hw[winxpx64]="ide"
+os_key[winxpx64]=""
+
+os_iso[win10x64]="Win10_22H2_English_x64v1.iso"
+os_mem[win10x64]=4096; os_cpus[win10x64]=2; os_disk[win10x64]=60
+os_guest[win10x64]="windows9-64"; os_variant[win10x64]="win10"
+os_kvm_extra[win10x64]=""
+os_vmware_hw[win10x64]="scsi"
+os_key[win10x64]=""
+
+os_iso[win10]="Win10_22H2_English_x32v1.iso"
+os_mem[win10]=2048; os_cpus[win10]=1; os_disk[win10]=60
+os_guest[win10]="windows9"; os_variant[win10]="win10"
+os_kvm_extra[win10]=""
+os_vmware_hw[win10]="scsi"
+os_key[win10]=""
+
+os_iso[win11x64]="Win11_24H2_English_x64.iso"
+os_mem[win11x64]=4096; os_cpus[win11x64]=2; os_disk[win11x64]=60
+os_guest[win11x64]="windows9-64"; os_variant[win11x64]="win11"
+os_kvm_extra[win11x64]="--boot uefi --tpm default"
+os_vmware_hw[win11x64]="scsi"
+os_key[win11x64]=""

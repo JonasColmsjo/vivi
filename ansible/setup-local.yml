@@ -1,0 +1,102 @@
+---
+# Setup local dependencies for VM sandbox management
+# Usage: ansible-playbook -i localhost, -c local ansible/setup-local.yml --ask-become-pass
+#
+# Remote host dependencies (KVM, genisoimage, etc.) are in:
+#   ansible/setup-kvm-forensics.yml
+
+- name: Setup local dependencies (control machine)
+  hosts: all
+  connection: local
+  become: yes
+
+  tasks:
+    - name: Install required packages
+      apt:
+        name:
+          - remmina
+          - remmina-plugin-vnc
+          - remmina-plugin-spice
+          - tigervnc-viewer
+          - radare2
+        state: present
+        update_cache: yes
+        cache_valid_time: 3600
+
+    - name: Check that just is installed
+      command: which just
+      register: just_check
+      changed_when: false
+      failed_when: false
+
+    - name: Install just via cargo if not present
+      become: no
+      command: cargo install just
+      when: just_check.rc != 0
+
+    # ── Ghidra decompiler ─────────────────────────────────────────────
+    - name: Install JDK 21 (required by Ghidra)
+      apt:
+        name: openjdk-21-jdk
+        state: present
+
+    - name: Check if Ghidra is installed
+      stat:
+        path: /opt/ghidra/ghidraRun
+      register: ghidra_check
+
+    - name: Download Ghidra 12.0.4
+      get_url:
+        url: https://github.com/NationalSecurityAgency/ghidra/releases/download/Ghidra_12.0.4_build/ghidra_12.0.4_PUBLIC_20260303.zip
+        dest: /tmp/ghidra.zip
+      when: not ghidra_check.stat.exists
+
+    - name: Extract Ghidra to /opt/ghidra
+      unarchive:
+        src: /tmp/ghidra.zip
+        dest: /opt/
+        remote_src: yes
+      when: not ghidra_check.stat.exists
+
+    - name: Rename extracted Ghidra directory to /opt/ghidra
+      shell: mv /opt/ghidra_* /opt/ghidra
+      args:
+        creates: /opt/ghidra/ghidraRun
+      when: not ghidra_check.stat.exists
+
+    - name: Symlink analyzeHeadless to PATH
+      file:
+        src: /opt/ghidra/support/analyzeHeadless
+        dest: /usr/local/bin/analyzeHeadless
+        state: link
+
+    - name: Clean up Ghidra zip
+      file:
+        path: /tmp/ghidra.zip
+        state: absent
+
+    # ── Python dependencies (micromamba) ──────────────────────────────
+    - name: Install Python packages from requirements.txt
+      become: no
+      shell: |
+        eval "$(micromamba shell hook -s bash)"
+        micromamba activate ~/micromamba-base
+        pip install -r {{ playbook_dir }}/../requirements.txt
+      args:
+        executable: /bin/bash
+      register: pip_install
+      changed_when: "'Successfully installed' in pip_install.stdout"
+
+    # ── Reverse engineering tools ──────────────────────────────────────
+    - name: Initialize r2pm package manager
+      become: no
+      command: r2pm -U
+      changed_when: false
+
+    - name: Install r2ghidra decompiler plugin
+      become: no
+      shell: r2pm -ci r2ghidra
+      args:
+        executable: /bin/bash
+      register: r2ghidra_install
+      changed_when: "'already installed' not in r2ghidra_install.stdout"
