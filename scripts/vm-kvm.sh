@@ -895,7 +895,7 @@ status)
         if ls '${KVMDIR}/instances/'*.qcow2 1>/dev/null 2>&1; then
             for f in '${KVMDIR}/instances/'*.qcow2; do
                 size=\$(du -h \"\$f\" | cut -f1)
-                backing=\$(qemu-img info \"\$f\" 2>/dev/null | grep 'backing file' | awk '{print \$3}' || echo 'n/a')
+                backing=\$(qemu-img info -U \"\$f\" 2>/dev/null | grep '^backing file:' | sed 's/^backing file: //' || echo 'n/a')
                 printf '  %-30s  %s (backing: %s)\n' \"\$(basename \$f)\" \"\$size\" \"\$(basename \$backing 2>/dev/null || echo n/a)\"
             done
         else
@@ -947,7 +947,7 @@ inspect)
                     echo "Error: mount failed. Trying with ntfs3..."
                     ssh "$HOST_ROOT_VAL" "mount -t ntfs3 -o ro ${nbd_dev}p1 '$mntdir'"
                 }
-            echo "Mounted. Browse with: just inspect $name ls /"
+            echo "Mounted. Browse with: just for-inspect $name ls /"
             ;;
         umount)
             nbd_disconnect "$mntdir" "$nbd_dev"
@@ -984,7 +984,7 @@ inspect)
             fi
             ;;
         "")
-            echo "Usage: just inspect <name> mount|umount|ls|info [path]"
+            echo "Usage: just for-inspect <name> mount|umount|ls|info [path]"
             echo ""
             echo "  mount       Mount running instance disk read-only (via qemu-nbd --snapshot)"
             echo "  umount      Unmount and disconnect NBD"
@@ -995,7 +995,7 @@ inspect)
             ;;
         *)
             echo "Unknown subcommand: $subcmd"
-            echo "Usage: just inspect <name> mount|umount|ls|info [path]"
+            echo "Usage: just for-inspect <name> mount|umount|ls|info [path]"
             exit 1
             ;;
     esac
@@ -1003,7 +1003,7 @@ inspect)
 
 pull)
     name="$1"; shift
-    vm_path="${1:?Usage: just pull <name> <vm-path> [local-dest]}"
+    vm_path="${1:?Usage: just for-pull <name> <vm-path> [local-dest]}"
     shift
     local_dest="${1:-.}"
 
@@ -1052,7 +1052,7 @@ inspect-registry)
     fi
 
     parse_hives "$hive" "$mntdir"
-    echo "Tip: Run 'just inspect $name umount' when done."
+    echo "Tip: Run 'just for-inspect $name umount' when done."
     ;;
 
 reset-password)
@@ -1163,7 +1163,7 @@ reset-password)
     else
         echo "Password cleared for user '$user' in $img"
         echo "Boot the VM and set a new password with:"
-        echo "  just exec <name> 'net user $user <newpassword>'"
+        echo "  just telnet <name> 'net user $user <newpassword>'"
     fi
     ;;
 

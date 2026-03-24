@@ -62,8 +62,22 @@ SFTP"
         fi
         echo "Push ${src} -> ${name}:${dest}"
         scp "${src}" "${host}:/tmp/scp-push-${tmpid}"
+        # Build mkdir commands for each path component (SFTP has no mkdir -p)
+        # /local/malware/X.ex_ -> mkdir "/local", mkdir "/local/malware"
+        dest_dir=$(dirname "$dest")
+        mkdir_cmds=""
+        d="$dest_dir"
+        parts=()
+        while [ "$d" != "/" ] && [ "$d" != "." ] && [ -n "$d" ]; do
+            parts=("$d" "${parts[@]}")
+            d=$(dirname "$d")
+        done
+        for p in "${parts[@]}"; do
+            mkdir_cmds="${mkdir_cmds}mkdir \"${p}\"
+"
+        done
         ssh "$host" "sshpass -p '${VM_PASS}' sftp ${opts} -o StrictHostKeyChecking=no '${VM_USER}@${vmip}' <<SFTP
-put /tmp/scp-push-${tmpid} \"${dest}\"
+${mkdir_cmds}put /tmp/scp-push-${tmpid} \"${dest}\"
 SFTP"
         ssh "$host" "rm -f /tmp/scp-push-${tmpid}"
         ;;

@@ -63,9 +63,9 @@ Telnet-based targets (`exec`, `sync-clock`, `procmon`, `ftp`) source `lib.sh` di
 
 - **Match QEMU arch to guest OS bitness**: 32-bit guests (e.g. Windows XP x86) MUST run on `qemu-system-i386`, 64-bit guests on `qemu-system-x86_64`. Running a 32-bit guest on `qemu-system-x86_64` breaks GDB hardware breakpoints, hardware watchpoints, and software breakpoints — the x86-64 GDB stub cannot set debug registers for 32-bit code. Always warn when a mismatched combination is detected.
 - **NEVER install packages directly on tcentre1/tcentre2** via `apt install` or `ssh root`. Always update the Ansible playbook in `ansible/` and run it. This keeps host configuration reproducible and documented.
-- **Copy files to stopped VMs directly** — mount the instance disk (`just for-inspect <name> mount`), copy files into the mounted filesystem, then unmount. No need to build an ISO.
+- **Copy files to stopped VMs directly** — mount the instance disk (`just disk inspect <name> mount`), copy files into the mounted filesystem, then unmount. No need to build an ISO.
 - **All VM operations run over SSH** — the justfile never assumes local execution
-- **Triple backend support**: KVM/libvirt, VMware Workstation (mutually exclusive, switch with `just host-hypervisor`), and ARM QEMU standalone
+- **Triple backend support**: KVM/libvirt, VMware Workstation (mutually exclusive, switch with `just host hypervisor`), and ARM QEMU standalone
 - **ARM VM detection**: `vm.sh` auto-routes to `vm-arm.sh` when template name contains `arm64` or instance has a `-vars.fd` file
 - **Storage paths on hosts**: `/mnt/vm/kvm/templates/` (templates), `/mnt/vm/kvm/instances/` (running VMs), `/mnt/vm/sandboxes/` (VMware)
 - **Forensic tools**: `regipy` and `python-evtx` in `/home/me/forensics-venv/` on the host
@@ -76,18 +76,18 @@ Telnet-based targets (`exec`, `sync-clock`, `procmon`, `ftp`) source `lib.sh` di
 Full malware analysis pipeline — capture baseline, run sample, capture post-state, analyze diffs:
 
 ```bash
-just for-inspect winxp-dyn mount
-just for-snapshot winxp-dyn baseline ./artifacts/sample
-just for-inspect winxp-dyn umount
+just disk inspect winxp-dyn mount
+just disk snapshot-state winxp-dyn baseline ./artifacts/sample
+just disk inspect winxp-dyn umount
 
-just da-run-sample winxp-dyn sample ./artifacts/sample 60
+just da run winxp-dyn sample ./artifacts/sample 60
 
-just for-inspect winxp-dyn mount
-just for-snapshot winxp-dyn post ./artifacts/sample
-just for-inspect winxp-dyn umount
+just disk inspect winxp-dyn mount
+just disk snapshot-state winxp-dyn post ./artifacts/sample
+just disk inspect winxp-dyn umount
 
-just sa-analyze ./artifacts/sample
-just snapshot winxp-dyn revert clean
+just sa analyze ./artifacts/sample
+just vm snapshot winxp-dyn revert clean
 ```
 
 ## ARM VM workflow (Linux malware analysis)
@@ -96,21 +96,21 @@ ARM VMs run as standalone `qemu-system-aarch64` (not libvirt). The arm64 kernel 
 
 ```bash
 # Create and launch ARM sandbox
-just launch debian-12-nocloud-arm64 mirai-sandbox --hostonly
+just vm launch debian-12-nocloud-arm64 mirai-sandbox --hostonly
 
 # Interact
-just connect mirai-sandbox          # serial console (Ctrl-] to detach)
-just telnet mirai-sandbox 'uname -a'  # run command via serial
+just vm connect mirai-sandbox          # serial console (Ctrl-] to detach)
+just vm telnet mirai-sandbox 'uname -a'  # run command via serial
 
 # Snapshot management
-just snapshot mirai-sandbox create pre-infection
-just snapshot mirai-sandbox revert clean
-just snapshot mirai-sandbox list
+just vm snapshot mirai-sandbox create pre-infection
+just vm snapshot mirai-sandbox revert clean
+just vm snapshot mirai-sandbox list
 
 # Lifecycle
-just stop mirai-sandbox
-just start mirai-sandbox
-just destroy mirai-sandbox
+just vm stop mirai-sandbox
+just vm start mirai-sandbox
+just vm destroy mirai-sandbox
 ```
 
 ARM instance files in `${KVMDIR}/instances/`:
@@ -121,7 +121,7 @@ ARM instance files in `${KVMDIR}/instances/`:
 - `<name>-monitor.sock` — QEMU monitor socket
 - `<name>-vars-<snap>.fd` — UEFI vars backup per snapshot
 
-Malware samples are defined in `config.sh` via `MALWARE_CMD` associative array, or in a `samples.sh` file in consumer repos that import this justfile. The `run-sample` target auto-sources `samples.sh` from the importing justfile's directory.
+Malware samples are defined in `config.sh` via `MALWARE_CMD` associative array, or in a `samples.sh` file in consumer repos that import this justfile. The `da run` target auto-sources `samples.sh` from the importing justfile's directory.
 
 ## ProcMon workflow
 
@@ -129,17 +129,17 @@ ProcMon is a GUI app — it cannot run from a telnet session. We use **PsExec -i
 
 ```bash
 just setup sysinternals winxp-dyn   # Install Sysinternals (one-time)
-just da-procmon winxp-dyn start my-capture
+just da procmon winxp-dyn start my-capture
 # ... run malware ...
-just da-procmon winxp-dyn stop
-just ftp pull winxp-dyn 'C:\my-capture.PML' ./artifacts/
+just da procmon winxp-dyn stop
+just vm ftp pull winxp-dyn 'C:\my-capture.PML' ./artifacts/
 ```
 
 Key rules:
 - **PsExec -i -d**: launches ProcMon in interactive session instantly
 - **/Terminate**: must be sent from interactive session (PsExec or `at /interactive`)
 - **taskkill /f corrupts PML files** — never use it for ProcMon
-- **FTP for large files**: TFTP times out >30MB, use `just ftp` instead
+- **FTP for large files**: TFTP times out >30MB, use `just vm ftp` instead
 
 ## Win10 template setup
 
@@ -150,7 +150,7 @@ When creating a new Win10 template, the first step is to **manually install Open
 2. Open Edge/browser, download official Win32-OpenSSH MSI from GitHub releases
 3. Install, then verify: `net start sshd`, `ssh me@localhost`
 4. Set sshd to auto-start: `sc.exe config sshd start= auto`
-5. Save as template: `just save <name> <template-name>`
+5. Save as template: `just vm save <name> <template-name>`
 
 ## SSH access
 
@@ -181,9 +181,9 @@ ssh -o 'HostkeyAlgorithms +ssh-rsa' \
 ### Usage
 
 ```bash
-just ssh <name>                          # Interactive SSH shell
-just ssh <name> 'dir C:\'               # Run command via SSH
-just ssh scp <name> C:\file.txt /tmp/   # SCP file from VM
+just vm ssh <name>                          # Interactive SSH shell
+just vm ssh <name> 'dir C:\'               # Run command via SSH
+just vm scp <name> pull C:\file.txt /tmp/   # SCP file from VM
 ```
 
 The `ssh` target auto-detects XP vs Win10+ from the template name and applies the correct SSH options.
@@ -235,7 +235,7 @@ Default is **hostonly** (no internet) — malware VMs should be isolated.
 ## VM networking
 
 - Host-only bridge: `virbr1`, host IP `192.168.100.1`
-- VM gets IP via DHCP — find with: `just ip <name>`
+- VM gets IP via DHCP — find with: `just vm ip <name>`
 - `virsh domifaddr` often fails on XP — `vm-ip.sh` falls back to ARP
 
 ## ETW tracing (logman)
@@ -243,11 +243,11 @@ Default is **hostonly** (no internet) — malware VMs should be isolated.
 Logman manages ETW kernel traces from telnet (no GUI needed). On XP, use the "NT Kernel Logger" session with hex flags — symbolic flags `(process,fileio)` break over telnet.
 
 ```bash
-just da-trace start winxp-dyn mytrace              # Default flags (process+thread+img+fileio+registry)
-just da-trace start winxp-dyn mytrace 0x12020107   # Add disk I/O
+just da trace start winxp-dyn mytrace              # Default flags (process+thread+img+fileio+registry)
+just da trace start winxp-dyn mytrace 0x12020107   # Add disk I/O
 # ... run malware ...
-just da-trace stop winxp-dyn mytrace
-just da-trace pull winxp-dyn mytrace ./traces/
+just da trace stop winxp-dyn mytrace
+just da trace pull winxp-dyn mytrace ./traces/
 ```
 
 Key limitation: **XP logman captures no FileIO events** despite the flag. Use ProcMon for file system visibility. On Vista+, logman FileIO works properly. See [`docs/logman-vs-procmon.md`](docs/logman-vs-procmon.md) for detailed comparison.
@@ -257,9 +257,9 @@ Key limitation: **XP logman captures no FileIO events** despite the flag. Use Pr
 Bottom-up LLM annotation using call graph awareness. Callee summaries are injected into caller prompts so the LLM understands context.
 
 ```bash
-just sa-re annotate-deep path/to/unpacked.exe
-just sa-re annotate-deep path/to/unpacked.exe --context path/to/context.txt
-just sa-re ghidra-decompile path/to/unpacked.exe  # Ghidra only
+just sa re annotate-deep path/to/unpacked.exe
+just sa re annotate-deep path/to/unpacked.exe --context path/to/context.txt
+just sa re ghidra-decompile path/to/unpacked.exe  # Ghidra only
 ```
 
 Pipeline stages:

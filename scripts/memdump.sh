@@ -163,7 +163,7 @@ case "$ACTION" in
                 echo "Dump file: $dmpname"
                 echo "Pull with: just ftp pull <vm> '$dmpname' ./"
             else
-                echo "Check dump files: just exec <vm> 'dir C:\\${outname}*'"
+                echo "Check dump files: just telnet <vm> 'dir C:\\${outname}*'"
             fi
         else
             echo ""

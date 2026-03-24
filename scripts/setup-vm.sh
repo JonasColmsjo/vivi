@@ -125,7 +125,7 @@ REMOTE
 
     echo ""
     echo "Sysinternals installed. Reboot the VM for PATH changes."
-    echo "Verify: just exec $VM_NAME 'PsExec.exe -accepteula'"
+    echo "Verify: just telnet $VM_NAME 'PsExec.exe -accepteula'"
     ;;
 
 python-2.7|python-3.4)
@@ -187,7 +187,7 @@ REMOTE
 
     echo ""
     echo "Python $PYVER installed to C:\\local\\python-${PYVER}"
-    echo "Verify: just exec $VM_NAME 'C:\\local\\python-${PYVER}\\python.exe -V'"
+    echo "Verify: just telnet $VM_NAME 'C:\\local\\python-${PYVER}\\python.exe -V'"
     ;;
 
 pe-sieve)
@@ -275,7 +275,7 @@ REMOTE
 
     echo ""
     echo "pe-sieve + mal_unpack installed to C:\\local\\pe-sieve\\"
-    echo "Verify: just exec $VM_NAME 'C:\\local\\pe-sieve\\pe-sieve32.exe /help'"
+    echo "Verify: just telnet $VM_NAME 'C:\\local\\pe-sieve\\pe-sieve32.exe /help'"
     ;;
 
 *)

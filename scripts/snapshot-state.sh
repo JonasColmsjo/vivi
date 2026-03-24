@@ -5,7 +5,7 @@
 #   phase: baseline | post (or any label)
 #   outdir: directory where output files are written
 #
-# Requires: VM disk mounted via `just inspect <vm> mount`
+# Requires: VM disk mounted via `just for-inspect <vm> mount`
 # Output:
 #   <outdir>/<phase>-files.txt          Sorted file listing
 #   <outdir>/<phase>-SOFTWARE.json      Registry hive dump (SOFTWARE)
@@ -29,7 +29,7 @@ mntdir="$KVMDIR/mnt/${VM_NAME}-live"
 echo "=== Snapshot state: $VM_NAME / $PHASE ==="
 
 if ! ssh "$HOST_ROOT_VAL" "mountpoint -q '$mntdir'" 2>/dev/null; then
-    echo "VM disk not mounted. Run: just inspect $VM_NAME mount"
+    echo "VM disk not mounted. Run: just for-inspect $VM_NAME mount"
     exit 1
 fi
 

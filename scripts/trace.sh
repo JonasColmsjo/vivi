@@ -85,7 +85,7 @@ start)
     echo "$output" | filter_telnet | tail -5
 
     echo ""
-    echo "Trace running. Stop with: just trace stop $name $trace"
+    echo "Trace running. Stop with: just da-trace stop $name $trace"
     ;;
 
 stop)
@@ -112,7 +112,7 @@ stop)
     echo "$output" | filter_telnet | grep -E "\.etl|\.csv|Directory" || true
 
     echo ""
-    echo "Pull with: just trace pull $name $trace"
+    echo "Pull with: just da-trace pull $name $trace"
     ;;
 
 status)
@@ -199,7 +199,7 @@ for line in open('${csv_file}'):
     echo "  process=0x1  thread=0x2  img=0x4  disk=0x100"
     echo "  net=0x10000  registry=0x20000  fileio=0x2000000"
     echo ""
-    echo "Example: just trace start winxp-dyn mytrace 0x12020107"
+    echo "Example: just da-trace start winxp-dyn mytrace 0x12020107"
     echo "         (adds disk I/O to default flags)"
     exit 1
     ;;
