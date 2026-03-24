@@ -30,12 +30,23 @@ just docs                          # Full CLI reference
 ## Quick start
 
 ```bash
-just vm templates                          # List available base VM images
-just launch winxp-clean winxp-dyn          # Create sandbox (host-only, no internet)
-just connect winxp-dyn                     # Open VNC viewer
-just vm snapshot winxp-dyn create clean    # Save clean state
-just stop winxp-dyn                        # Stop and remove instance
+just vm templates                                   # List base VMs with sizes
+just vm install <os> <name>                         # Fresh install from ISO (just vm install --list)
+just vm launch <base> <name>                        # Create sandbox (host-only, no internet)
+just vm launch <base> <name> --bridge               # Create sandbox with internet access
+just vm launch <base> <name> --no-network           # Create sandbox without network
+just vm connect <name>                              # Open VNC/virt-manager to sandbox
+just vm snapshot <name> create                      # Take snapshot (timestamp name)
+just vm snapshot <name> create <snap>               # Take snapshot with custom name
+just vm snapshot <name> revert <snap>               # Revert to snapshot
+just vm pause <name>                                # Pause a running VM
+just vm resume <name>                               # Resume a paused VM
+just vm stop <name>                                 # Stop and remove sandbox
+just vm save <name> [template-name]                 # Save instance as reusable template
+just vm destroy <name>                              # Stop, delete, confirm
 ```
+
+Aliases: `just launch`, `just start`, `just connect`, `just stop`
 
 ## Dynamic analysis workflow
 
