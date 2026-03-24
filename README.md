@@ -22,7 +22,6 @@ VM sandbox manager for dynamic malware analysis and reverse engineering. Manages
 ```bash
 cp config.sh.template config.sh   # Edit with your host details
 just setup                         # Install local dependencies (Ansible)
-just host-setup                    # Install KVM/libvirt + forensic tools on host
 just docs                          # Full CLI reference
 ```
 
@@ -31,10 +30,10 @@ just docs                          # Full CLI reference
 ## Quick start
 
 ```bash
-just templates                             # List available base VM images
+just vm templates                          # List available base VM images
 just launch winxp-clean winxp-dyn          # Create sandbox (host-only, no internet)
 just connect winxp-dyn                     # Open VNC viewer
-just snapshot winxp-dyn create clean       # Save clean state
+just vm snapshot winxp-dyn create clean    # Save clean state
 just stop winxp-dyn                        # Stop and remove instance
 ```
 
@@ -42,30 +41,30 @@ just stop winxp-dyn                        # Stop and remove instance
 
 ```bash
 # Capture baseline filesystem + registry state
-just for-inspect winxp-dyn mount
-just for-snapshot winxp-dyn baseline ./artifacts/sample
-just for-inspect winxp-dyn umount
+just disk inspect winxp-dyn mount
+just disk snapshot-state winxp-dyn baseline ./artifacts/sample
+just disk inspect winxp-dyn umount
 
 # Run the sample (60s timeout)
-just da-run-sample winxp-dyn sample ./artifacts/sample 60
+just da detonate winxp-dyn sample ./artifacts/sample 60
 
 # Capture post-infection state and diff
-just for-inspect winxp-dyn mount
-just for-snapshot winxp-dyn post ./artifacts/sample
-just for-inspect winxp-dyn umount
+just disk inspect winxp-dyn mount
+just disk snapshot-state winxp-dyn post ./artifacts/sample
+just disk inspect winxp-dyn umount
 
-just sa-analyze ./artifacts/sample
-just snapshot winxp-dyn revert clean
+just sa analyze ./artifacts/sample
+just vm snapshot winxp-dyn revert clean
 ```
 
 ## ETW tracing
 
 ```bash
-just da-trace start winxp-dyn mytrace              # process + thread + fileio + registry
-just da-trace start winxp-dyn mytrace 0x12020107   # add disk I/O
+just da trace start winxp-dyn mytrace              # process + thread + fileio + registry
+just da trace start winxp-dyn mytrace 0x12020107   # add disk I/O
 # ... run malware ...
-just da-trace stop winxp-dyn mytrace
-just da-trace pull winxp-dyn mytrace ./traces/
+just da trace stop winxp-dyn mytrace
+just da trace pull winxp-dyn mytrace ./traces/
 ```
 
 > Note: XP logman captures no FileIO events. Use ProcMon for filesystem visibility. See [`docs/logman-vs-procmon.md`](docs/logman-vs-procmon.md).
@@ -74,19 +73,19 @@ just da-trace pull winxp-dyn mytrace ./traces/
 
 ```bash
 just setup sysinternals winxp-dyn
-just da-procmon winxp-dyn start my-capture
+just da procmon winxp-dyn start my-capture
 # ... run malware ...
-just da-procmon winxp-dyn stop
-just ftp pull winxp-dyn 'C:\my-capture.PML' ./artifacts/
+just da procmon winxp-dyn stop
+just vm ftp pull winxp-dyn 'C:\my-capture.PML' ./artifacts/
 ```
 
 ## ARM Linux sandbox (e.g. Mirai)
 
 ```bash
 just launch debian-12-nocloud-arm64 mirai-sandbox --hostonly
-just connect mirai-sandbox           # serial console (Ctrl-] to detach)
-just telnet mirai-sandbox 'uname -a'
-just snapshot mirai-sandbox create pre-infection
+just connect mirai-sandbox                    # serial console (Ctrl-] to detach)
+just vm telnet mirai-sandbox 'uname -a'
+just vm snapshot mirai-sandbox create pre-infection
 ```
 
 ## LLM annotation pipeline (Ghidra + call graph)
@@ -94,9 +93,9 @@ just snapshot mirai-sandbox create pre-infection
 Bottom-up annotation: callee summaries feed into caller prompts for full call-graph context.
 
 ```bash
-just sa-re annotate-deep path/to/unpacked.exe
-just sa-re annotate-deep path/to/unpacked.exe --context path/to/notes.txt
-just sa-re ghidra-decompile path/to/unpacked.exe
+just sa re annotate-deep path/to/unpacked.exe
+just sa re annotate-deep path/to/unpacked.exe --context path/to/notes.txt
+just sa re ghidra-decompile path/to/unpacked.exe
 ```
 
 Pipeline: Ghidra export → topological sort → per-function LLM annotation (10 parallel, resumable) → assembled `.c` file.
